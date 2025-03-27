@@ -37,14 +37,13 @@ tokenizer = AutoTokenizer.from_pretrained(
     use_auth_token=hf_token
 )
 # Patch the tokenizer if necessary (this avoids missing attribute issues)
-# Patch the tokenizer and assign it to the model so that model.chat doesn't need an explicit tokenizer argument.
+# Patch the tokenizer to add the missing attribute if needed.
 if not hasattr(tokenizer, "tokenizer"):
-    tokenizer.tokenizer = tokenizer
-model.tokenizer = tokenizer
+    setattr(tokenizer, "tokenizer", tokenizer)
 
 st.success("Multimodal model loaded successfully.\n")
 
-# Define the detailed question for analysis.
+# --- Define Task Variables ---
 QUESTION = (
     "Provide a detailed analysis of this lung ultrasound image. "
     "Include the imaging modality, the organ being examined, detailed observations about the image features, "
@@ -54,14 +53,13 @@ QUESTION = (
 
 def generate_caption(image):
     """
-    Uses the model.chat method to generate a caption from the image.
-    The message contains only the detailed question.
-    The image is provided via the keyword parameter.
+    Uses the model.chat method to generate a caption/answer from the image.
+    The Colab script passes both the image and the question as a list in the message content,
+    while also passing the image via the keyword argument.
     """
-    msgs = [{'role': 'user', 'content': [QUESTION]}]
+    msgs = [{'role': 'user', 'content': [image, QUESTION]}]
     try:
-        # Now call model.chat without explicitly passing the tokenizer.
-        res = model.chat(image=image, msgs=msgs, sampling=True, temperature=0.95, stream=False)
+        res = model.chat(image=image, msgs=msgs, tokenizer=tokenizer, sampling=True, temperature=0.95, stream=False)
         st.write("**Generated Caption:**", res)
         return res
     except Exception as e:
@@ -107,7 +105,7 @@ def generate_report_with_gpt4o(caption):
         st.error(f"Error during GPT-4o call: {e}")
         return None
 
-# File uploader for image input
+# --- File Uploader ---
 uploaded_file = st.file_uploader("Choose a lung ultrasound image", type=["jpg", "jpeg", "png"])
 if uploaded_file is not None:
     image = Image.open(uploaded_file).convert("RGB")
