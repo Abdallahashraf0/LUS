@@ -58,7 +58,7 @@ def generate_caption(image):
     msgs = [{'role': 'user', 'content': [image, QUESTION]}]
     try:
         # Pass tokenizer, image, and msgs as positional arguments
-        res = model.chat(tokenizer, image, msgs, sampling=True, temperature=0.95, stream=False)
+        res = model.chat(tokenizer, [image], msgs, sampling=True, temperature=0.95, stream=False)
         st.write("**Generated Caption:**", res)
         return res
     except Exception as e:
