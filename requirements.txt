@@ -3,6 +3,6 @@ pillow
 openai==0.28
 torch
 torchvision
-transformers==4.40.2
+transformers
 accelerate
 
