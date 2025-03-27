@@ -1,4 +1,5 @@
 streamlit
+nest_asyncio
 torch
 transformers
 openai
