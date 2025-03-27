@@ -37,12 +37,14 @@ tokenizer = AutoTokenizer.from_pretrained(
     use_auth_token=hf_token
 )
 # Patch the tokenizer if necessary (this avoids missing attribute issues)
+# Patch the tokenizer and assign it to the model so that model.chat doesn't need an explicit tokenizer argument.
 if not hasattr(tokenizer, "tokenizer"):
     tokenizer.tokenizer = tokenizer
+model.tokenizer = tokenizer
 
 st.success("Multimodal model loaded successfully.\n")
 
-# Define a detailed question that aligns with the GPT-4o prompt
+# Define the detailed question for analysis.
 QUESTION = (
     "Provide a detailed analysis of this lung ultrasound image. "
     "Include the imaging modality, the organ being examined, detailed observations about the image features, "
@@ -52,14 +54,14 @@ QUESTION = (
 
 def generate_caption(image):
     """
-    Uses the model.chat method to generate a caption/answer from the image.
-    The message content now contains only the detailed question.
-    The image is provided via the image parameter.
+    Uses the model.chat method to generate a caption from the image.
+    The message contains only the detailed question.
+    The image is provided via the keyword parameter.
     """
     msgs = [{'role': 'user', 'content': [QUESTION]}]
     try:
-        # Pass the image only via the keyword parameter; the message contains only the question.
-        res = model.chat(image=image, msgs=msgs, tokenizer=tokenizer, sampling=True, temperature=0.95, stream=False)
+        # Now call model.chat without explicitly passing the tokenizer.
+        res = model.chat(image=image, msgs=msgs, sampling=True, temperature=0.95, stream=False)
         st.write("**Generated Caption:**", res)
         return res
     except Exception as e:
