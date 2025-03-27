@@ -1,7 +1,7 @@
 streamlit
 nest_asyncio
 torch
-transformers
+transformers>=4.45.1
 openai
 Pillow
 bitsandbytes>=0.43.0
