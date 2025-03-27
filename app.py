@@ -13,25 +13,29 @@ hf_token = st.secrets["hf_token"]
 st.title("AI-Powered Lung Ultrasound Analysis")
 st.write("Loading Bio-Medical MultiModal model... (this may take a few minutes)")
 
-# Configure BitsAndBytes for 4-bit quantization
-bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_use_double_quant=True,
-    bnb_4bit_compute_dtype=torch.float16,
-)
+# Uncomment and configure BitsAndBytes if you wish to use quantization.
+# bnb_config = BitsAndBytesConfig(
+#     load_in_4bit=True,
+#     bnb_4bit_quant_type="nf4",
+#     bnb_4bit_use_double_quant=True,
+#     bnb_4bit_compute_dtype=torch.float16,
+# )
 
 # Define model ID and load model/tokenizer with the token
 model_id = "ContactDoctor/Bio-Medical-MultiModal-Llama-3-8B-V1"
 model = AutoModel.from_pretrained(
     model_id,
-    # quantization_config=bnb_config,
+    # quantization_config=bnb_config,  # Quantization disabled
     device_map="auto",
     torch_dtype=torch.float16,
     trust_remote_code=True,
     use_auth_token=hf_token,
 )
-tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True, use_auth_token=hf_token)
+tokenizer = AutoTokenizer.from_pretrained(
+    model_id, 
+    trust_remote_code=True, 
+    use_auth_token=hf_token
+)
 st.success("Multimodal model loaded successfully.\n")
 
 # Define a detailed question that aligns with the GPT-4o prompt
@@ -45,11 +49,11 @@ QUESTION = (
 def generate_caption(image):
     """
     Uses the model.chat method to generate a caption/answer from the image.
-    The message consists of the image and a detailed question.
+    The message consists of the image and the detailed question.
     """
     msgs = [{'role': 'user', 'content': [image, QUESTION]}]
     try:
-        res = model.chat(image=image, msgs=msgs, tokenizer=tokenizer, sampling=True, temperature=0.95, stream=False)
+        res = model.chat(image=image, msgs=msgs, sampling=True, temperature=0.95, stream=False)
         st.write("**Generated Caption:**", res)
         return res
     except Exception as e:
@@ -99,9 +103,8 @@ def generate_report_with_gpt4o(caption):
 uploaded_file = st.file_uploader("Choose a lung ultrasound image", type=["jpg", "jpeg", "png"])
 if uploaded_file is not None:
     image = Image.open(uploaded_file).convert("RGB")
-    st.image(image, caption="Uploaded Image", use_column_width=True)
+    st.image(image, caption="Uploaded Image", use_container_width=True)
     
-    # Generate caption and clinical report
     caption = generate_caption(image)
     if caption:
         report = generate_report_with_gpt4o(caption)
