@@ -52,13 +52,14 @@ QUESTION = (
 
 def generate_caption(image):
     """
-    Uses the model.chat method to generate a caption/answer from the image.
-    The message consists of the image and the detailed question.
+    Uses the model.chat method to generate a caption from the image.
+    In this version, we pass the image only via the image parameter (as a list)
+    and provide the question in the message content.
     """
-    msgs = [{'role': 'user', 'content': [image, QUESTION]}]
+    msgs = [{'role': 'user', 'content': [QUESTION]}]
     try:
-        # Pass tokenizer, image, and msgs as positional arguments
-        res = model.chat(tokenizer, [image], msgs, sampling=True, temperature=0.95, stream=False)
+        # Pass the image as a list to the image parameter
+        res = model.chat(tokenizer, image=[image], msgs=msgs, sampling=True, temperature=0.95, stream=False)
         st.write("**Generated Caption:**", res)
         return res
     except Exception as e:
