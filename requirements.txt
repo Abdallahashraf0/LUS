@@ -1,0 +1,8 @@
+streamlit
+pillow
+openai==0.28
+torch
+torchvision
+transformers
+accelerate
+bitsandbytes
