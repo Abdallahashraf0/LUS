@@ -1,139 +1,157 @@
-import os
-import torch
-import openai
-import nest_asyncio
-from PIL import Image
+# app.py
 import streamlit as st
-from transformers import AutoModel, AutoTokenizer
-
-# Fix async event loop conflicts
-nest_asyncio.apply()
+import os
+import io
+import torch
+from openai import OpenAI
+from PIL import Image
+from transformers import AutoModel, AutoTokenizer, BitsAndBytesConfig
 
 # --- Configuration ---
-openai.api_key = st.secrets["OPENAI_API_KEY"]
-hf_token = st.secrets["hf_token"]
+# secrets.toml should contain:
+# OPENAI_API_KEY = "your-openai-key"
+# HUGGINGFACE_TOKEN = "your-hf-token"
 
-st.title("Medical Imaging Analysis System")
-st.write("Initializing Bio-Medical MultiModal Model...")
+# Initialize OpenAI client
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# --- Model Configuration ---
-model_id = "ContactDoctor/Bio-Medical-MultiModal-Llama-3-8B-V1"
-QUESTION = 'Give the modality, organ, analysis, abnormalities (if any), treatment (if abnormalities are present)?'
+# --- Streamlit Setup ---
+st.set_page_config(
+    page_title="Medical Image Analysis",
+    page_icon="🏥",
+    layout="wide"
+)
 
-@st.cache_resource(show_spinner=False)
-def load_model_components():
-    # Load tokenizer with remote code support
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_id,
-        trust_remote_code=True,
-        use_auth_token=hf_token
-    )
+# --- Model Loading with Caching ---
+@st.cache_resource
+def load_multimodal_model():
+    """Load the Bio-Medical MultiModal model with caching"""
+    # Get Hugging Face token from secrets
+    hf_token = st.secrets["hf_token"]
     
-    # Load model with Flash Attention
-    model = AutoModel.from_pretrained(
-        model_id,
-        device_map="auto",
-        torch_dtype=torch.float16,
-        trust_remote_code=True,
-        use_auth_token=hf_token,
-        # attn_implementation="flash_attention_2"
+    # Configure 4-bit quantization
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_compute_dtype=torch.float16,
     )
+
+    model_id = "ContactDoctor/Bio-Medical-MultiModal-Llama-3-8B-V1"
     
+    with st.spinner("Loading Bio-Medical MultiModal model (this may take 2-5 minutes)..."):
+        model = AutoModel.from_pretrained(
+            model_id,
+            token=hf_token,
+            quantization_config=bnb_config,
+            device_map="auto",
+            torch_dtype=torch.float16,
+            trust_remote_code=True,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_id,
+            token=hf_token,
+            trust_remote_code=True
+        )
+    
+    st.success("Multimodal model loaded successfully")
     return model, tokenizer
 
-# Load components with progress
-with st.spinner("Loading medical AI engine (this may take 3-5 minutes)..."):
-    model, tokenizer = load_model_components()
-st.success("System ready for analysis!")
+# Initialize models
+model, tokenizer = load_multimodal_model()
 
-# --- Core Analysis Functions ---
-def analyze_medical_image(image):
-    """Process image using the biomedical model"""
+# --- Constants ---
+QUESTION = (
+    "Provide a detailed analysis of this lung ultrasound image. "
+    "Include the imaging modality, the organ being examined, detailed observations about the image features, "
+    "any abnormalities that you notice (such as B-lines, pleural irregularities, consolidations, etc.), "
+    "and any possible treatment recommendations if abnormalities are present."
+)
+
+# --- Processing Functions ---
+def generate_caption(image):
+    """Generate image analysis using the multimodal model"""
+    msgs = [{'role': 'user', 'content': [image, QUESTION]}]
     try:
-        msgs = [{'role': 'user', 'content': [image, QUESTION]}]
-        response_stream = model.chat(
+        res = model.chat(
             image=image,
             msgs=msgs,
             tokenizer=tokenizer,
             sampling=True,
             temperature=0.95,
-            stream=True  # Use streaming as per documentation
+            stream=False
         )
-        
-        # Stream the response incrementally
-        full_response = ""
-        placeholder = st.empty()
-        for chunk in response_stream:
-            full_response += chunk
-            placeholder.markdown(f"**AI Analysis:**\n{full_response}▌")
-        
-        placeholder.markdown(f"**AI Analysis:**\n{full_response}")
-        return full_response
-        
+        return res
     except Exception as e:
-        st.error(f"Analysis failed: {str(e)}")
+        st.error(f"Error during multimodal model chat: {str(e)}")
         return None
 
-# --- Clinical Report Generation ---
-def generate_clinical_report(analysis):
-    """Generate structured report using GPT-4o"""
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4o",
-            messages=[{
-                "role": "system",
-                "content": "Transform this medical analysis into a structured clinical report:"
-            }, {
-                "role": "user",
-                "content": f"Analysis: {analysis}\n\nFormat:\n"
-                           "1. Modality & Organ\n2. Key Findings\n"
-                           "3. Abnormalities\n4. Treatment Recommendations\n"
-                           "Use medical terminology from latest guidelines."
-            }],
-            temperature=0.7,
-            max_tokens=512
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        st.error(f"Report generation failed: {str(e)}")
-        return None
-
-# --- UI Flow ---
-uploaded_file = st.file_uploader("Upload Medical Image", type=["jpg", "jpeg", "png"])
-if uploaded_file:
-    image = Image.open(uploaded_file).convert('RGB')
-    st.image(image, caption="Uploaded Image", use_container_width=True)
+def generate_report_with_gpt4o(caption):
+    """Generate clinical report using GPT-4o"""
+    prompt = (
+        f"Based on the following ultrasound image description: '{caption}', "
+        "generate a detailed clinical report for a lung ultrasound image with this structure:\n\n"
+        "## Findings:\n- B-lines characteristics\n- Pleural abnormalities\n- Consolidations\n- Lung sliding status\n\n"
+        "## Impression:\n- Differential diagnosis\n- Confidence assessment\n\n"
+        "## Recommendations:\n- Immediate next steps\n- Follow-up schedule\n\n"
+        "Use professional medical terminology and maintain clinical accuracy."
+    )
     
-    if st.button("Analyze Image", type="primary"):
-        analysis = analyze_medical_image(image)
-        
-        if analysis:
-            with st.spinner("Generating clinical report..."):
-                report = generate_clinical_report(analysis)
-            
-            st.divider()
-            st.subheader("Clinical Report")
-            st.markdown(f"**Analysis Summary**\n{analysis}")
-            st.markdown(f"**Structured Report**\n{report}")
-            
-            # Add export capability
-            st.download_button(
-                label="Download Full Report",
-                data=f"Analysis Summary:\n{analysis}\n\nClinical Report:\n{report}",
-                file_name="medical_analysis_report.txt",
-                mime="text/plain"
-            )
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a board-certified radiologist."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=512,
+            top_p=1
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        st.error(f"GPT-4o API Error: {str(e)}")
+        return None
 
-# --- Sidebar Information ---
-st.sidebar.markdown("""
-**System Requirements**
-- PyTorch 2.1.2+
-- CUDA 12.1+ (NVIDIA GPUs)
-- 16GB+ VRAM recommended
-- Python 3.10+
+# --- Streamlit UI ---
+st.title("Lung Ultrasound Analysis System 🩺")
+st.markdown("""
+    Upload a lung ultrasound image for AI-powered analysis.  
+    This system combines multimodal AI with clinical expertise.
+""")
 
-**Model Limitations**
-- For non-commercial use only
-- Verify critical findings with clinical experts
-- May contain inherent training biases
+uploaded_file = st.file_uploader(
+    "Choose an ultrasound image (JPEG/PNG)",
+    type=["jpg", "jpeg", "png"],
+    accept_multiple_files=False
+)
+
+if uploaded_file:
+    col1, col2 = st.columns(2, gap="medium")
+    
+    with col1:
+        st.subheader("Patient Scan")
+        image = Image.open(uploaded_file).convert('RGB')
+        st.image(image, use_column_width=True, caption="Uploaded Ultrasound Image")
+    
+    with col2:
+        with st.status("Analyzing image features...", expanded=True) as status:
+            caption = generate_caption(image)
+            
+            if caption:
+                status.update(label="Analysis Complete", state="complete", expanded=False)
+                st.subheader("Preliminary Findings")
+                st.write(caption)
+                
+                with st.spinner("Generating clinical report..."):
+                    report = generate_report_with_gpt4o(caption)
+                
+                if report:
+                    st.subheader("Clinical Report")
+                    st.markdown(f"\n{report}\n")
+
+st.markdown("---")
+st.markdown("""
+    **Clinical Disclaimer**:  
+    This AI analysis is for informational purposes only. Always consult a qualified healthcare professional for medical diagnosis and treatment decisions.
 """)
