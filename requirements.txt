@@ -5,4 +5,4 @@ torch
 torchvision
 transformers
 accelerate
-bitsandbytes-cuda117
+BitsAndBytes
