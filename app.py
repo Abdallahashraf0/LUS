@@ -25,7 +25,7 @@ bnb_config = BitsAndBytesConfig(
 model_id = "ContactDoctor/Bio-Medical-MultiModal-Llama-3-8B-V1"
 model = AutoModel.from_pretrained(
     model_id,
-    quantization_config=bnb_config,
+    # quantization_config=bnb_config,
     device_map="auto",
     torch_dtype=torch.float16,
     trust_remote_code=True,
