@@ -12,7 +12,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY", "your-openai-api-key-here")
 st.title("AI-Powered Lung Ultrasound Analysis")
 st.write("Loading Bio-Medical MultiModal model... (this may take a few minutes)")
 
-# Configure BitsAndBytes for 4-bit quantization (per model documentation)
+# Configure BitsAndBytes for 4-bit quantization
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
@@ -20,7 +20,7 @@ bnb_config = BitsAndBytesConfig(
     bnb_4bit_compute_dtype=torch.float16,
 )
 
-# Define model ID and load model/tokenizer
+# Define model ID and load model/tokenizer with the token
 model_id = "ContactDoctor/Bio-Medical-MultiModal-Llama-3-8B-V1"
 model = AutoModel.from_pretrained(
     model_id,
@@ -28,10 +28,9 @@ model = AutoModel.from_pretrained(
     device_map="auto",
     torch_dtype=torch.float16,
     trust_remote_code=True,
-    use_auth_token="HUGGINGFACE_API_KEY",
+    use_auth_token=hf_token,
 )
-
-tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True, use_auth_token=hf_token)
 st.success("Multimodal model loaded successfully.\n")
 
 # Define a detailed question that aligns with the GPT-4o prompt
