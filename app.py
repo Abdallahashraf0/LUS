@@ -6,14 +6,15 @@ from PIL import Image
 import streamlit as st
 from transformers import AutoModel, AutoTokenizer, BitsAndBytesConfig
 
-# Set your OpenAI API key (or set it as an environment variable)
+# Set your OpenAI API key from environment or secrets
 openai.api_key = os.getenv("OPENAI_API_KEY", "your-openai-api-key-here")
-hf_token = st.secrets["hf_token"]
+hf_token = st.secrets["general"]["hf_token"]
 
 st.title("AI-Powered Lung Ultrasound Analysis")
 st.write("Loading Bio-Medical MultiModal model... (this may take a few minutes)")
 
-# Uncomment and configure BitsAndBytes if you wish to use quantization.
+# --- Model Loading ---
+# (If you want to use quantization, uncomment the following block)
 # bnb_config = BitsAndBytesConfig(
 #     load_in_4bit=True,
 #     bnb_4bit_quant_type="nf4",
@@ -21,11 +22,10 @@ st.write("Loading Bio-Medical MultiModal model... (this may take a few minutes)"
 #     bnb_4bit_compute_dtype=torch.float16,
 # )
 
-# Define model ID and load model/tokenizer with the token
 model_id = "ContactDoctor/Bio-Medical-MultiModal-Llama-3-8B-V1"
 model = AutoModel.from_pretrained(
     model_id,
-    # quantization_config=bnb_config,  # Quantization disabled
+    # quantization_config=bnb_config,  # Quantization disabled; uncomment if needed.
     device_map="auto",
     torch_dtype=torch.float16,
     trust_remote_code=True,
@@ -36,14 +36,10 @@ tokenizer = AutoTokenizer.from_pretrained(
     trust_remote_code=True, 
     use_auth_token=hf_token
 )
-# Patch the tokenizer if necessary (this avoids missing attribute issues)
-# Patch the tokenizer to add the missing attribute if needed.
-if not hasattr(tokenizer, "tokenizer"):
-    setattr(tokenizer, "tokenizer", tokenizer)
 
 st.success("Multimodal model loaded successfully.\n")
 
-# --- Define Task Variables ---
+# --- Define Task Variable ---
 QUESTION = (
     "Provide a detailed analysis of this lung ultrasound image. "
     "Include the imaging modality, the organ being examined, detailed observations about the image features, "
@@ -53,13 +49,17 @@ QUESTION = (
 
 def generate_caption(image):
     """
-    Uses the model.chat method to generate a caption/answer from the image.
-    The Colab script passes both the image and the question as a list in the message content,
-    while also passing the image via the keyword argument.
+    Generates a caption/analysis for the image using the model.chat method.
+    
+    In this version:
+      - The message content contains only the QUESTION.
+      - The image is passed as a list via the positional argument.
+      - The tokenizer is passed as the first positional argument.
     """
-    msgs = [{'role': 'user', 'content': [image, QUESTION]}]
+    msgs = [{'role': 'user', 'content': [QUESTION]}]
     try:
-        res = model.chat(image=image, msgs=msgs, tokenizer=tokenizer, sampling=True, temperature=0.95, stream=False)
+        # Call model.chat with positional arguments: tokenizer, [image], msgs, and other parameters.
+        res = model.chat(tokenizer, [image], msgs, sampling=True, temperature=0.95, stream=False)
         st.write("**Generated Caption:**", res)
         return res
     except Exception as e:
