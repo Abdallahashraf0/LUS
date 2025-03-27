@@ -36,6 +36,10 @@ tokenizer = AutoTokenizer.from_pretrained(
     trust_remote_code=True, 
     use_auth_token=hf_token
 )
+# Patch the tokenizer if necessary (this avoids missing attribute issues)
+if not hasattr(tokenizer, "tokenizer"):
+    tokenizer.tokenizer = tokenizer
+
 st.success("Multimodal model loaded successfully.\n")
 
 # Define a detailed question that aligns with the GPT-4o prompt
@@ -53,7 +57,8 @@ def generate_caption(image):
     """
     msgs = [{'role': 'user', 'content': [image, QUESTION]}]
     try:
-        res = model.chat(tokenizer, image=image, msgs=msgs, sampling=True, temperature=0.95, stream=False)
+        # Pass tokenizer, image, and msgs as positional arguments
+        res = model.chat(tokenizer, image, msgs, sampling=True, temperature=0.95, stream=False)
         st.write("**Generated Caption:**", res)
         return res
     except Exception as e:
