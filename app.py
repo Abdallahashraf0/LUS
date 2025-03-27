@@ -28,9 +28,9 @@ model = AutoModel.from_pretrained(
     device_map="auto",
     torch_dtype=torch.float16,
     trust_remote_code=True,
-    # Remove attn_implementation if FlashAttention is not installed
-    # attn_implementation="flash_attention_2",
+    use_auth_token="HUGGINGFACE_API_KEY"
 )
+
 tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 st.success("Multimodal model loaded successfully.\n")
 
