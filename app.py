@@ -49,17 +49,18 @@ QUESTION = (
 
 def generate_caption(image):
     """
-    Generates a caption/analysis for the image using the model.chat method.
+    Uses the model.chat method to generate a caption/analysis from the image.
     
     In this version:
+      - The image is converted to a NumPy array (which is subscriptable)
       - The message content contains only the QUESTION.
-      - The image is passed as a list via the positional argument.
-      - The tokenizer is passed as the first positional argument.
+      - We pass the tokenizer as the first positional argument, the list [img_array] as the image, and the messages.
     """
+    # Convert PIL image to a NumPy array
+    img_array = np.array(image)
     msgs = [{'role': 'user', 'content': [QUESTION]}]
     try:
-        # Call model.chat with positional arguments: tokenizer, [image], msgs, and other parameters.
-        res = model.chat(tokenizer, [image], msgs, sampling=True, temperature=0.95, stream=False)
+        res = model.chat(tokenizer, [img_array], msgs, sampling=True, temperature=0.95, stream=False)
         st.write("**Generated Caption:**", res)
         return res
     except Exception as e:
