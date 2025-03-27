@@ -8,6 +8,7 @@ from transformers import AutoModel, AutoTokenizer, BitsAndBytesConfig
 
 # Set your OpenAI API key (or set it as an environment variable)
 openai.api_key = os.getenv("OPENAI_API_KEY", "your-openai-api-key-here")
+hf_token = st.secrets["general"]["hf_token"]
 
 st.title("AI-Powered Lung Ultrasound Analysis")
 st.write("Loading Bio-Medical MultiModal model... (this may take a few minutes)")
