@@ -22,6 +22,40 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- CUDA Device Check ---
+def check_cuda_devices():
+    """Display CUDA device information"""
+    st.subheader("🖥️ Hardware Information")
+    cuda_available = torch.cuda.is_available()
+    
+    # Display CUDA availability
+    if cuda_available:
+        st.success("✅ CUDA is available")
+        device_count = torch.cuda.device_count()
+        st.write(f"**Number of GPUs detected:** {device_count}")
+        
+        # Display detailed GPU information
+        for i in range(device_count):
+            st.markdown(f"""
+            **GPU {i} Details**  
+            - Name: `{torch.cuda.get_device_name(i)}`  
+            - Memory: {torch.cuda.get_device_properties(i).total_memory/1024**3:.2f} GB  
+            - Compute Capability: {torch.cuda.get_device_properties(i).major}.{torch.cuda.get_device_properties(i).minor}
+            """)
+    else:
+        st.error("❌ CUDA is not available")
+        st.warning("""
+        Possible reasons:
+        - NVIDIA drivers not installed
+        - CUDA toolkit not installed
+        - Running on CPU-only environment
+        """)
+    
+    return cuda_available
+
+# Run device check at startup
+cuda_available = check_cuda_devices()
+
 # --- Model Loading with Caching ---
 @st.cache_resource
 def load_multimodal_model():
@@ -29,33 +63,38 @@ def load_multimodal_model():
     # Get Hugging Face token from secrets
     hf_token = st.secrets["hf_token"]
     
-    # Configure 4-bit quantization
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_compute_dtype=torch.float16,
-    )
+    # Configure 4-bit quantization only if CUDA is available
+    bnb_config = None
+    if cuda_available:
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=torch.float16,
+        )
 
     model_id = "ContactDoctor/Bio-Medical-MultiModal-Llama-3-8B-V1"
     
     with st.spinner("Loading Bio-Medical MultiModal model (this may take 2-5 minutes)..."):
-        model = AutoModel.from_pretrained(
-            model_id,
-            token=hf_token,
-            quantization_config=bnb_config,
-            device_map="auto",
-            torch_dtype=torch.float16,
-            trust_remote_code=True,
-        )
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_id,
-            token=hf_token,
-            trust_remote_code=True
-        )
-    
-    st.success("Multimodal model loaded successfully")
-    return model, tokenizer
+        try:
+            model = AutoModel.from_pretrained(
+                model_id,
+                token=hf_token,
+                quantization_config=bnb_config,
+                device_map="auto" if cuda_available else None,
+                torch_dtype=torch.float16 if cuda_available else torch.float32,
+                trust_remote_code=True,
+            )
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_id,
+                token=hf_token,
+                trust_remote_code=True
+            )
+            st.success("Multimodal model loaded successfully")
+            return model, tokenizer
+        except Exception as e:
+            st.error(f"Model loading failed: {str(e)}")
+            st.stop()
 
 # Initialize models
 model, tokenizer = load_multimodal_model()
