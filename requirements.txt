@@ -4,3 +4,4 @@ torch
 transformers
 openai
 Pillow
+bitsandbytes>=0.43.0
